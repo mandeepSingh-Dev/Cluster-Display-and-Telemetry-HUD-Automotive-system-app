@@ -176,10 +176,23 @@ graph TD
 
 To test the dual-display AAOS setup (Display 0 for CID Controller, Display 1 for Cluster HUD):
 
+### Method 1: Using Android Studio Emulator Extended Controls (GUI)
 1. Open **Android Studio Emulator Extended Controls**.
 2. Navigate to **Displays**.
 3. Click **Add Secondary Display** and set the type to **Secondary or Car Cluster / Instrument Cluster** (e.g., 1920x720 resolution).
 4. Restart or launch the emulator.
+
+### Method 2: Using ADB Commands (CLI)
+```bash
+# List all active connected displays
+adb shell dumpsys display | grep "DisplayDeviceInfo"
+
+# Create a virtual secondary display for the cluster (e.g. 1920x720 resolution)
+adb shell wm create-display 1920 720
+
+# Remove / destroy a virtual display by its display ID (e.g. display ID 1)
+adb shell wm remove-display 1
+```
 
 ---
 
