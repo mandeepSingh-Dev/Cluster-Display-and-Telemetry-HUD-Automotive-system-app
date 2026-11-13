@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<permissions>
+    <privapp-permissions package="com.oem.cluster">
+        <!-- VHAL Telemetry Permissions -->
+        <permission name="android.car.permission.CAR_SPEED" />
+        <permission name="android.car.permission.CAR_ENGINE_DETAILED" />
+        <permission name="android.car.permission.CAR_EXTERIOR_LIGHTS" />
+        <permission name="android.car.permission.CAR_TIRES" />
+        <permission name="android.car.permission.CAR_POWERTRAIN" />
+
+        <!-- Secondary Cluster Window / Display Overlay Permission -->
+        <permission name="android.permission.INTERNAL_SYSTEM_WINDOW" />
+    </privapp-permissions>
+</permissions>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- VHAL Telemetry Permissions -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <uses-permission android:name="android.car.permission.CAR_ENGINE_DETAILED" />
+    <uses-permission android:name="android.car.permission.CAR_EXTERIOR_LIGHTS" />
+    <uses-permission android:name="android.car.permission.CAR_TIRES" />
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+    <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW" />
+
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="true" />
+
+    <application
+        android:allowBackup="false"
+        android:label="OEM Digital Cluster"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <!-- Bound IPC Service owning the CarPropertyManager VHAL connection -->
+        <service
+            android:name=".data.TelemetryService"
+            android:enabled="true"
+            android:exported="false" />
+
+
+        <!-- Required so the system classloader links android.car at runtime -->
+        <uses-library
+            android:name="android.car"
+            android:required="true" />
+
+        <!-- Display 0 (CID - Center Information Display): Bench Simulator & Cluster Launcher -->
+        <activity
+            android:name=".ui.cluster.CidControllerActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Display 1 (Secondary Instrument Cluster HUD): 60 FPS Compose Canvas UI -->
+        <activity
+            android:name=".ui.cluster.ClusterHudActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:resizeableActivity="true"
+            android:showOnLockScreen="true"
+            android:taskAffinity="com.oem.cluster.hud">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.car.cluster.CLUSTER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>
