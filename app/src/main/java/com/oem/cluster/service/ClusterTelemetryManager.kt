@@ -7,6 +7,7 @@ import android.car.VehiclePropertyIds
 import android.car.hardware.CarPropertyValue
 import android.car.hardware.property.CarPropertyManager
 import android.content.Context
+import android.os.Looper
 import android.util.Log
 import com.oem.cluster.data.ClusterTelemetryState
 import com.oem.cluster.data.DriveMode
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.logging.Handler
 import kotlin.math.roundToInt
 
 class ClusterTelemetryManager(context: Context) {
@@ -31,6 +33,8 @@ class ClusterTelemetryManager(context: Context) {
     private val propertyCallback = object : CarPropertyManager.CarPropertyEventCallback {
         override fun onChangeEvent(value: CarPropertyValue<*>) {
             // Ignore hardware updates while user is actively driving sliders from CID simulator
+
+            Log.d("fkbmfknbkfb", "AreaID: ${value.areaId} PropertyId: ${value.propertyId} Value:  ${value.value} ")
             if (_state.value.isBenchOverrideActive) return
 
             when (value.propertyId) {
@@ -68,12 +72,14 @@ class ClusterTelemetryManager(context: Context) {
         }
     }
 
+    // Inside connect():
     fun connect() {
         if (car != null) return
+        val mainHandler = android.os.Handler(Looper.getMainLooper())
         try {
             car = Car.createCar(
                 appContext,
-                null,
+                mainHandler,
                 Car.CAR_WAIT_TIMEOUT_WAIT_FOREVER
             ) { connectedCar, ready ->
                 if (ready) {
@@ -81,22 +87,21 @@ class ClusterTelemetryManager(context: Context) {
                         connectedCar.getCarManager(Car.PROPERTY_SERVICE) as? CarPropertyManager
                     registerVhalSubscriptions()
                     _state.update { it.copy(isVhalConnected = true) }
-                    Log.i(TAG, "Connected to CarPropertyManager")
+                    Log.i(TAG, "Connected to CarPropertyManager on MainLooper")
                 } else {
                     _state.update { it.copy(isVhalConnected = false) }
                     Log.w(TAG, "Car service disconnected")
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Car.createCar failed (non-AAOS environment?): ${e.message}")
+            Log.e(TAG, "Car.createCar failed: ${e.message}", e)
         }
     }
-
     private fun registerVhalSubscriptions() {
         val mgr = propertyManager ?: return
 
-        val speedOk = subscribeSafe(mgr, VehiclePropertyIds.PERF_VEHICLE_SPEED, CarPropertyManager.SENSOR_RATE_FAST)
-        val rpmOk = subscribeSafe(mgr, VehiclePropertyIds.ENGINE_RPM, CarPropertyManager.SENSOR_RATE_FAST)
+        val speedOk = subscribeSafe(mgr, VehiclePropertyIds.PERF_VEHICLE_SPEED, CarPropertyManager.SENSOR_RATE_UI)
+        val rpmOk = subscribeSafe(mgr, VehiclePropertyIds.ENGINE_RPM, CarPropertyManager.SENSOR_RATE_UI)
         val gearOk = subscribeSafe(mgr, VehiclePropertyIds.CURRENT_GEAR, CarPropertyManager.SENSOR_RATE_ONCHANGE)
         val signalOk = subscribeSafe(mgr, VehiclePropertyIds.TURN_SIGNAL_STATE, CarPropertyManager.SENSOR_RATE_ONCHANGE)
         val tpmsOk = subscribeSafe(mgr, VehiclePropertyIds.TIRE_PRESSURE, CarPropertyManager.SENSOR_RATE_ONCHANGE)
@@ -118,7 +123,10 @@ class ClusterTelemetryManager(context: Context) {
         return try {
             mgr.registerCallback(propertyCallback, propId, rate)
             true
-        } catch (e: Exception) {
+        } catch (e: SecurityException){
+            Log.w(TAG,"Security Exception: Property 0x${propId.toString(16)} unavailable: ${e.message}")
+         false
+        }catch (e: Exception) {
             Log.w(TAG, "Property 0x${propId.toString(16)} unavailable: ${e.message}")
             false
         }

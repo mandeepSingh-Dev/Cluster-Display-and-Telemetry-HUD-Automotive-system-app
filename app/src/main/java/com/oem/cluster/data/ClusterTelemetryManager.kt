@@ -51,6 +51,8 @@ class ClusterTelemetryManager(context: Context) {
          */
         override fun onChangeEvent(value: CarPropertyValue<*>) {
             // Ignore hardware sensor updates while the user is actively driving sliders from CID simulator/bench override
+
+
             if (_state.value.isBenchOverrideActive) return
 
             // Handle updates based on specific vehicle property IDs received from VHAL

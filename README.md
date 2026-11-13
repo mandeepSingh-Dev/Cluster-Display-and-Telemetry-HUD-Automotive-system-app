@@ -1,5 +1,100 @@
 # Cluster (Digital Instrument & Telemetry HUD) App for Android Automotive OS (AAOS)
 
+
+1. Complete System & Architecture Block Diagram
+   ====================================================================================================
+   [ LAYER 0: SYSTEM PARTITION & AAOS PRIVILEGES ]
+   ====================================================================================================
+   /system/priv-app/Cluster/Cluster.apk
+   /system/etc/permissions/privapp-permissions-com.oem.cluster.xml
+   │
+   ├──► Grants Privileged/Signature Permissions at Boot:
+   │      • CAR_ENGINE_DETAILED   • CAR_TIRES
+   │      • CAR_EXTERIOR_LIGHTS   • CAR_POWERTRAIN
+   │      • INTERNAL_SYSTEM_WINDOW
+   └──► Runtime Dangerous Permission (granted via pm grant):
+   • CAR_SPEED (maps to Location permission group)
+
+====================================================================================================
+[ LAYER 1: VEHICLE HAL (VHAL) & CAR SERVICE (Android Automotive Framework) ]
+====================================================================================================
+VHAL Daemon (IVehicle) / Extended Controls / Sensor Replay / KitchenSink / adb inject-vhal-event
+│
+├──► Continuous Properties (SENSOR_RATE_FAST ~10-60Hz):
+│      • PERF_VEHICLE_SPEED (291504647 / 0x11600207) ──► Float (m/s)
+│      • ENGINE_RPM         (291504901 / 0x11600305) ──► Float (RPM)
+│
+└──► Event-Driven Properties (SENSOR_RATE_ONCHANGE):
+• CURRENT_GEAR       (289408001 / 0x11400401) ──► Int (VehicleGear bitmask)
+• GEAR_SELECTION     (289407744 / 0x11400400) ──► Int (VehicleGear bitmask)
+• TURN_SIGNAL_STATE  (289408008 / 0x11400408) ──► Int (0=None, 1=L, 2=R, 3=Hazard)
+• TIRE_PRESSURE      (392168201 / 0x17600309) ──► Float (kPa) + AreaID (1, 2, 4, 8)
+│
+▼ (Binder IPC Callback)
+====================================================================================================
+[ LAYER 2: BOUND IPC SERVICE & TELEMETRY ENGINE (Single Source of Truth) ]
+====================================================================================================
+TelemetryService : Service()
+│  • onCreate() ──► instantiates ClusterTelemetryManager & calls connect()
+│  • onBind()   ──► returns TelemetryBinder.getManager() to both Display 0 & Display 1
+│
+└──► ClusterTelemetryManager(context)
+├──► connect()
+│      └──► Car.createCar(appContext, mainHandler, WAIT_FOREVER)
+│             └──► connectedCar.getCarManager(Car.PROPERTY_SERVICE) as CarPropertyManager
+│                    └──► registerVhalSubscriptions() ──► subscribeSafe(mgr, propId, rate)
+│
+├──► propertyCallback : CarPropertyEventCallback
+│      └──► onChangeEvent(value: CarPropertyValue<*>)
+│             ├──► GATEKEEPER: if (_state.value.isBenchOverrideActive) return
+│             ├──► PERF_VEHICLE_SPEED ──► (speedMs * 3.6f).roundToInt() -> speedKmh
+│             ├──► ENGINE_RPM         ──► rpmVal.roundToInt()         -> rpm
+│             ├──► CURRENT_GEAR       ──► mapVhalGear(rawGear)        -> gearLabel
+│             ├──► TURN_SIGNAL_STATE  ──► TurnSignal.fromVhal(raw)    -> turnSignal
+│             └──► TIRE_PRESSURE      ──► kpa * 0.145038f             -> updateWheelPressure()
+│
+├──► Bench Simulator Override Functions (Called from Display 0):
+│      ├──► updateSimulatedSpeed(kmh)        ──► sets isBenchOverrideActive = true
+│      ├──► updateSimulatedRpm(rpm)          ──► sets isBenchOverrideActive = true
+│      ├──► updateSimulatedGear(label)       ──► sets isBenchOverrideActive = true
+│      ├──► updateSimulatedTurnSignal(sig)   ──► sets isBenchOverrideActive = true
+│      ├──► updateSimulatedTirePressures(p)  ──► sets isBenchOverrideActive = true
+│      ├──► setDriveMode(mode)               ──► updates ECO / COMFORT / SPORT
+│      └──► setBenchOverrideEnabled(false)   ──► unlocks VHAL gate ("Use Live VHAL")
+│
+└──► Emits: val state: StateFlow<ClusterTelemetryState>
+│                                           │
+┌────────────┴────────────┐                 ┌────────────┴────────────┐
+▼ (IPC Bound Client 1)    │                 ▼ (IPC Bound Client 2)    │
+====================================        ====================================
+[ DISPLAY 0: CID CONTROLLER ]               [ DISPLAY 1+: CLUSTER HUD ]
+====================================        ====================================
+CidControllerActivity                       ClusterHudActivity (singleInstance)
+• onCreate():                               • Launched by ClusterDisplayRouter:
+└─► ClusterDisplayRouter                   └─► findClusterDisplay(context)
+.launchClusterOnSecondaryDisplay()        (dm.displays where id != 0)
+• onStart() / onStop():                       └─► ActivityOptions.makeBasic()
+└─► bindService(TelemetryService)               .apply { launchDisplayId = id }
+• setContent():                             • onStart() / onStop():
+└─► manager.state                          └─► bindService(TelemetryService)
+.collectAsStateWithLifecycle()      • setContent():
+└─► CidSimulatorScreen(...)                └─► manager.state
+├─► "Use Live VHAL" Button                 .collectAsStateWithLifecycle()
+├─► "Launch Cluster" Button           └─► ClusterHudScreen(state, displayId)
+├─► Speed & RPM Sliders                    ├─► paletteForDriveMode(driveMode)
+├─► Gear & Turn Signal Chips               ├─► TopTelltaleAndGearBar()
+├─► Drive Mode Theme Chips                 ├─► CircularTelemetryGauge() [Speed]
+└─► Front-Left TPMS Slider                 ├─► CenterTpmsChassisCard()  [4 Wheels]
+├─► CircularTelemetryGauge() [RPM]
+└─► Footer (Display ID + VHAL S
+
+
+
+
+
+
+
+
 An advanced, production-grade Android Automotive OS (AAOS) Digital Instrument Cluster and Telemetry HUD application built with **Jetpack Compose**, **Kotlin Coroutines (StateFlow)**, and **AAOS VHAL (`CarPropertyManager`)**.
 
 ---
@@ -128,3 +223,6 @@ adb shell cmd car_service inject-vhal-event CURRENT_GEAR 0 4
 # Monitor VHAL and Cluster telemetry logs in real-time
 adb logcat -s ClusterTelemetryMgr ClusterHudActivity CidControllerActivity
 ```
+
+
+
